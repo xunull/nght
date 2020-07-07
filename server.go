@@ -18,28 +18,28 @@ var (
 )
 
 type StatusParam struct {
-	Status int
+	Status int `uri:"status" binding:"required"`
 }
 
 // 请求是什么状态码,就返回什么状态码
 func StatusResp(c *gin.Context) {
 	var param StatusParam
 	if err := c.ShouldBindUri(&param); err != nil {
-		c.JSON(400, gin.H{"msg": err})
+		c.JSON(400, gin.H{"msg": err.Error()})
 	} else {
 		c.JSON(param.Status, gin.H{"status": param.Status})
 	}
 }
 
 type ResponseTimeParam struct {
-	Time int
+	Time int `uri:"time" binding:"required"`
 }
 
 // 请求是多长时间,就多长时间返回
 func ResponseTimeResp(c *gin.Context) {
 	var param ResponseTimeParam
 	if err := c.ShouldBindUri(&param); err != nil {
-		c.JSON(400, gin.H{"msg": err})
+		c.JSON(400, gin.H{"msg": err.Error()})
 	} else {
 		time.Sleep(time.Duration(param.Time) * time.Second)
 		c.JSON(http.StatusOK, gin.H{"time": param.Time})
@@ -53,7 +53,7 @@ func SplitStatus(target string) ([]int, error) {
 	if l%3 != 0 {
 		return nil, errors.New("请求参数不合法,每三位为一个状态码")
 	} else {
-		status := make([]int, l/3)
+		status := make([]int, 0, l/3)
 		for i := 0; i <= l-3; i += 3 {
 			if s, err := strconv.Atoi(target[i : i+3]); err != nil {
 				return nil, errors.New("请求参数不合法,请输入有效状态码")
@@ -67,7 +67,7 @@ func SplitStatus(target string) ([]int, error) {
 }
 
 type RandomStatusParam struct {
-	StatusRandom string
+	StatusRandom string `uri:"statusRandom" binding:"required"`
 }
 
 // 在给定的状态码见随机的返回,请求参数要合理
@@ -82,15 +82,20 @@ func RandomStatusResp(c *gin.Context) {
 			c.JSON(400, gin.H{"msg": err})
 		} else {
 			rand.Seed(time.Now().UnixNano())
-			i := rand.Intn(l/3 - 1)
-			c.JSON(status[i], gin.H{"msg": i})
+			if len(status) > 1 {
+				i := rand.Intn(l/3)
+				c.JSON(status[i], gin.H{"msg": status[i]})
+			} else {
+				c.JSON(status[0], gin.H{"msg": status[0]})
+			}
+
 		}
 	}
 }
 
 type RandomCrashParam struct {
-	Percentage   int
-	StatusRandom string
+	Percentage   int    `uri:"percentage" binding:"required"`
+	StatusRandom string `uri:"statusRandom" binding:"required"`
 }
 
 // percentage 为200状态码的比例,当非200时,将从提供的状态码中随机返回一个
@@ -107,8 +112,12 @@ func RandomCrashResp(c *gin.Context) {
 			if rand.Intn(100) < param.Percentage {
 				c.Status(http.StatusOK)
 			} else {
-				i := rand.Intn(l/3 - 1)
-				c.JSON(status[i], gin.H{"msg": i})
+				if len(status) > 1 {
+					i := rand.Intn(l/3)
+					c.JSON(status[i], gin.H{"msg": status[i]})
+				} else {
+					c.JSON(status[0], gin.H{"msg": status[0]})
+				}
 			}
 		}
 	}
@@ -124,7 +133,7 @@ func HealthResp(c *gin.Context) {
 }
 
 type HealthRandomParam struct {
-	Percentage int
+	Percentage int `uri:"percentage" binding:"required"`
 }
 
 // 随机返回502
@@ -166,7 +175,7 @@ func AddRoute() {
 
 	healthGroup := ginServer.Group("/health")
 	{
-		healthGroup.Any("/", HealthResp)
+		healthGroup.Any("", HealthResp)
 		healthGroup.Any("/random/:percentage", HealthRandomResp)
 		healthGroup.Any("/true", HealthTrueResp)
 		healthGroup.Any("/false", HealthFalseResp)
