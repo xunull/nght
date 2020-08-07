@@ -7,3 +7,13 @@ a gin web server for nginx http test ( nginx gin http test  or nginx http test)
 使用golang开发的是因为go install 之后的bin文件可以直接运行,python和java都需要有依赖环境
 
 使用gin开发是因为其很简单
+
+
+## python版本
+
+uvicorn nght:app --reload
+
+
+## todo
+
+动态创建path,动态销毁path 

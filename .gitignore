@@ -17,3 +17,5 @@
 .idea
 
 nght
+
+__pycache__/
