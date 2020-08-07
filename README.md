@@ -11,7 +11,8 @@ a gin web server for nginx http test ( nginx gin http test  or nginx http test)
 
 ## python版本
 
-uvicorn nght:app --reload
+uvicorn nght:app --host 0.0.0.0 --port 8000 --reload
+uvicorn nght:app --host 0.0.0.0 --port 8001 --reload
 
 
 ## todo
