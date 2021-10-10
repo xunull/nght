@@ -2,12 +2,13 @@ package main
 
 import (
 	"errors"
-	"github.com/gin-gonic/gin"
 	"math/rand"
 	"net/http"
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/gin-gonic/gin"
 )
 
 var (
@@ -21,7 +22,7 @@ type StatusParam struct {
 	Status int `uri:"status" binding:"required"`
 }
 
-// 请求是什么状态码,就返回什么状态码
+// return the code in request
 func StatusResp(c *gin.Context) {
 	var param StatusParam
 	if err := c.ShouldBindUri(&param); err != nil {
@@ -35,7 +36,6 @@ type ResponseTimeParam struct {
 	Time int `uri:"time" binding:"required"`
 }
 
-// 请求是多长时间,就多长时间返回
 func ResponseTimeResp(c *gin.Context) {
 	var param ResponseTimeParam
 	if err := c.ShouldBindUri(&param); err != nil {
@@ -70,8 +70,6 @@ type RandomStatusParam struct {
 	StatusRandom string `uri:"statusRandom" binding:"required"`
 }
 
-// 在给定的状态码见随机的返回,请求参数要合理
-// random 为每次请求的时间种子
 func RandomStatusResp(c *gin.Context) {
 	var param RandomStatusParam
 	if err := c.ShouldBindUri(&param); err != nil {
@@ -83,7 +81,7 @@ func RandomStatusResp(c *gin.Context) {
 		} else {
 			rand.Seed(time.Now().UnixNano())
 			if len(status) > 1 {
-				i := rand.Intn(l/3)
+				i := rand.Intn(l / 3)
 				c.JSON(status[i], gin.H{"msg": status[i]})
 			} else {
 				c.JSON(status[0], gin.H{"msg": status[0]})
@@ -98,7 +96,6 @@ type RandomCrashParam struct {
 	StatusRandom string `uri:"statusRandom" binding:"required"`
 }
 
-// percentage 为200状态码的比例,当非200时,将从提供的状态码中随机返回一个
 func RandomCrashResp(c *gin.Context) {
 	var param RandomCrashParam
 	if err := c.ShouldBindUri(&param); err != nil {
@@ -113,7 +110,7 @@ func RandomCrashResp(c *gin.Context) {
 				c.Status(http.StatusOK)
 			} else {
 				if len(status) > 1 {
-					i := rand.Intn(l/3)
+					i := rand.Intn(l / 3)
 					c.JSON(status[i], gin.H{"msg": status[i]})
 				} else {
 					c.JSON(status[0], gin.H{"msg": status[0]})
@@ -136,7 +133,6 @@ type HealthRandomParam struct {
 	Percentage int `uri:"percentage" binding:"required"`
 }
 
-// 随机返回502
 func HealthRandomResp(c *gin.Context) {
 	var param HealthRandomParam
 	if err := c.ShouldBindUri(&param); err != nil {
@@ -151,7 +147,6 @@ func HealthRandomResp(c *gin.Context) {
 	}
 }
 
-// 健康检测返回健康
 func HealthTrueResp(c *gin.Context) {
 	mu.Lock()
 	defer mu.Unlock()
@@ -159,7 +154,6 @@ func HealthTrueResp(c *gin.Context) {
 	c.Status(http.StatusOK)
 }
 
-// 健康检测返回不健康
 func HealthFalseResp(c *gin.Context) {
 	mu.Lock()
 	defer mu.Unlock()
