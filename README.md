@@ -1,6 +1,6 @@
 # nght
-a gin web server for nginx http test ( nginx gin http test  or nginx http test)
 
+a gin web server for nginx http test ( nginx gin http test  or nginx http test)
 
 本项目使用golang 和 gin 进行开发
 
@@ -14,19 +14,8 @@ a gin web server for nginx http test ( nginx gin http test  or nginx http test)
 uvicorn nght:app --host 0.0.0.0 --port 8000 --reload
 uvicorn nght:app --host 0.0.0.0 --port 8001 --reload
 
-
 ## todo
 
-动态创建path,动态销毁path 
-=======
-
-a web server for nginx http test
-
-## a python script
-
-uvicorn nght:app --host 0.0.0.0 --port 8000 --reload
-
-## todo
-
-1. a api for create url path
-1. fasthttp
+1. 动态创建path,动态销毁path
+2. a api for create url path 
+3. use golang fasthttp

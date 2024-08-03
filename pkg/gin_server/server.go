@@ -1,4 +1,4 @@
-package main
+package gin_server
 
 import (
 	"errors"
@@ -13,16 +13,49 @@ import (
 
 var (
 	ginServer  *gin.Engine
-	httpServer *http.Server
+	HttpServer *http.Server
 	mu         sync.Mutex
 	health     = true
 )
 
-type StatusParam struct {
-	Status int `uri:"status" binding:"required"`
+type (
+	StatusParam struct {
+		Status int `uri:"status" binding:"required"`
+	}
+
+	ResponseTimeParam struct {
+		Time int `uri:"time" binding:"required"`
+	}
+
+	RandomStatusParam struct {
+		StatusRandom string `uri:"statusRandom" binding:"required"`
+	}
+
+	RandomCrashParam struct {
+		Percentage   int    `uri:"percentage" binding:"required"`
+		StatusRandom string `uri:"statusRandom" binding:"required"`
+	}
+
+	HealthRandomParam struct {
+		Percentage int `uri:"percentage" binding:"required"`
+	}
+
+	EchoTextParam struct {
+		Text string `uri:"text" binding:"required"`
+	}
+)
+
+func EchoTextResp(c *gin.Context) {
+	var param EchoTextParam
+	if err := c.ShouldBindUri(&param); err != nil {
+		c.JSON(400, gin.H{"msg": err.Error()})
+	} else {
+		c.JSON(http.StatusOK, gin.H{"text": param.Text})
+	}
 }
 
-// return the code in request
+// StatusResp
+// return the status code in request
 func StatusResp(c *gin.Context) {
 	var param StatusParam
 	if err := c.ShouldBindUri(&param); err != nil {
@@ -30,10 +63,6 @@ func StatusResp(c *gin.Context) {
 	} else {
 		c.JSON(param.Status, gin.H{"status": param.Status})
 	}
-}
-
-type ResponseTimeParam struct {
-	Time int `uri:"time" binding:"required"`
 }
 
 func ResponseTimeResp(c *gin.Context) {
@@ -44,7 +73,6 @@ func ResponseTimeResp(c *gin.Context) {
 		time.Sleep(time.Duration(param.Time) * time.Second)
 		c.JSON(http.StatusOK, gin.H{"time": param.Time})
 	}
-
 }
 
 func SplitStatus(target string) ([]int, error) {
@@ -66,10 +94,6 @@ func SplitStatus(target string) ([]int, error) {
 
 }
 
-type RandomStatusParam struct {
-	StatusRandom string `uri:"statusRandom" binding:"required"`
-}
-
 func RandomStatusResp(c *gin.Context) {
 	var param RandomStatusParam
 	if err := c.ShouldBindUri(&param); err != nil {
@@ -89,11 +113,6 @@ func RandomStatusResp(c *gin.Context) {
 
 		}
 	}
-}
-
-type RandomCrashParam struct {
-	Percentage   int    `uri:"percentage" binding:"required"`
-	StatusRandom string `uri:"statusRandom" binding:"required"`
 }
 
 func RandomCrashResp(c *gin.Context) {
@@ -129,10 +148,6 @@ func HealthResp(c *gin.Context) {
 
 }
 
-type HealthRandomParam struct {
-	Percentage int `uri:"percentage" binding:"required"`
-}
-
 func HealthRandomResp(c *gin.Context) {
 	var param HealthRandomParam
 	if err := c.ShouldBindUri(&param); err != nil {
@@ -162,8 +177,14 @@ func HealthFalseResp(c *gin.Context) {
 }
 
 func AddRoute() {
+	// 请求是什么就返回什么
+	ginServer.Any("/echo/:text", EchoTextResp)
+
+	// 请求是什么状态码，返回什么状态码
 	ginServer.Any("/status/:status", StatusResp)
+	// 请求多少秒后返回
 	ginServer.Any("/response_time/:time", ResponseTimeResp)
+	// 随机返回状态码
 	ginServer.Any("/random/:statusRandom", RandomStatusResp)
 	ginServer.Any("/random_crash/:percentage/:statusRandom", RandomCrashResp)
 
