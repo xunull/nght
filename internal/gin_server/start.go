@@ -1,18 +1,19 @@
 package gin_server
 
 import (
+	"fmt"
 	"github.com/gin-gonic/gin"
 	"log"
 	"net/http"
 )
 
-func StartWeb(port string) {
+func StartWeb(port int) {
 	ginServer = gin.Default()
 
 	AddRoute()
 
 	HttpServer = &http.Server{
-		Addr:           ":" + port,
+		Addr:           fmt.Sprintf(":%d", port),
 		Handler:        ginServer,
 		MaxHeaderBytes: 1 << 20,
 	}

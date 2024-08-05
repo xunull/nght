@@ -6,6 +6,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var (
+	Port int
+)
+
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "nght",
@@ -23,6 +27,5 @@ func Execute() {
 }
 
 func init() {
-
-	rootCmd.PersistentFlags().StringVarP(&Port, "port", "p", "8080", "the port")
+	rootCmd.PersistentFlags().IntVarP(&Port, "port", "p", 8080, "the port")
 }

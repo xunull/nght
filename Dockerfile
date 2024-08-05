@@ -16,5 +16,5 @@ WORKDIR /app
 
 COPY --from=builder /app/nght /app/nght
 
-ENTRYPOINT ["/app/nght","server"]
+ENTRYPOINT ["/app/nght","server","--type", "fiber"]
 

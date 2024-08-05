@@ -7,7 +7,6 @@ import (
 )
 
 var (
-	Port       string
 	RemoteHost string
 )
 
