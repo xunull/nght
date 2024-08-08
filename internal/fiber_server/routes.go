@@ -1,6 +1,10 @@
 package fiber_server
 
-import "github.com/gofiber/fiber/v2"
+import (
+	"fmt"
+	"github.com/gofiber/fiber/v2"
+	"github.com/xunull/nght/internal/global"
+)
 
 func SetupRoutes(app *fiber.App) {
 
@@ -26,5 +30,19 @@ func SetupRoutes(app *fiber.App) {
 		healthGroup.All("/true", SetHealthTrue)
 		healthGroup.All("/false", SetHealthFalse)
 	}
+
+	// 顺序很重要，不能放在上面的路由之前
+	app.All("*", func(c *fiber.Ctx) error {
+		fmt.Println(c.OriginalURL())
+
+		if responseJsonFlag {
+			return c.JSON(fiber.Map{
+				"url":      c.OriginalURL(),
+				"hostname": global.Hostname,
+			})
+		} else {
+			return c.SendString(fmt.Sprintf("url: %s\nhostname: %s\n", c.OriginalURL(), global.Hostname))
+		}
+	})
 
 }
