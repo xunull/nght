@@ -1,20 +1,16 @@
 package cmd
 
 import (
-	"context"
+	"github.com/spf13/cobra"
 	"github.com/xunull/nght/internal/fiber_server"
 	"github.com/xunull/nght/internal/gin_server"
+	"github.com/xunull/nght/internal/global"
 	"log"
-	"os"
-	"os/signal"
-	"syscall"
-	"time"
-
-	"github.com/spf13/cobra"
 )
 
 var (
 	EchoHostname bool
+	AppName      string
 	ServerType   string
 	ResponseJson bool
 )
@@ -22,24 +18,16 @@ var (
 // serverCmd represents the server command
 var serverCmd = &cobra.Command{
 	Use:   "server",
-	Short: "start gin web server",
-	Long:  `start gin web server`,
+	Short: "start web server",
+	Long:  `start web server`,
 	Run: func(cmd *cobra.Command, args []string) {
 
-		if ServerType == "gin" {
-			go gin_server.StartWeb(Port)
-			mainSigChan := make(chan os.Signal, 1)
-			signal.Notify(mainSigChan, os.Interrupt, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)
-			<-mainSigChan
+		global.SetAppName(AppName)
 
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			if err := gin_server.HttpServer.Shutdown(ctx); err != nil {
-				log.Fatal("Server Shutdown error:", err)
-			}
-			log.Println("Server exit")
+		if ServerType == "gin" {
+			gin_server.Serve(Port)
 		} else if ServerType == "fiber" {
-			fiber_server.Server(Port)
+			fiber_server.Serve(Port)
 		} else {
 			log.Fatal("server type not support")
 		}
@@ -52,4 +40,5 @@ func init() {
 	serverCmd.PersistentFlags().BoolVar(&EchoHostname, "echo-hostname", false, "echo host name")
 	serverCmd.PersistentFlags().StringVarP(&ServerType, "type", "t", "gin", "server type")
 	serverCmd.PersistentFlags().BoolVar(&ResponseJson, "response-json", false, "response json")
+	serverCmd.PersistentFlags().StringVar(&AppName, "app-name", "nght", "app name")
 }

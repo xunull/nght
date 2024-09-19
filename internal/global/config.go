@@ -4,6 +4,7 @@ import "os"
 
 var (
 	Hostname string
+	AppName  string
 )
 
 func init() {
@@ -12,4 +13,8 @@ func init() {
 		panic(err)
 	}
 	Hostname = hostname
+}
+
+func SetAppName(appName string) {
+	AppName = appName
 }
