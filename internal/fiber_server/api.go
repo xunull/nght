@@ -9,13 +9,34 @@ import (
 	"time"
 )
 
+func makeDefaultResponseMap(data fiber.Map) fiber.Map {
+	if data == nil {
+		data = fiber.Map{}
+	}
+	dd := fiber.Map{
+		"hostname": global.Hostname,
+		"app-name": global.AppName,
+	}
+	return utils.MergeMaps(dd, data)
+}
+
+func EchoUrlResp(c *fiber.Ctx) error {
+
+	if responseJsonFlag {
+		return c.JSON(makeDefaultResponseMap(fiber.Map{
+			"url": c.OriginalURL(),
+		}))
+	} else {
+		return c.SendString(fmt.Sprintf("url: %s\nhostname: %s\n", c.OriginalURL(), global.Hostname))
+	}
+}
+
 func EchoTextResp(c *fiber.Ctx) error {
 
 	if responseJsonFlag {
-		return c.JSON(fiber.Map{
-			"text":     c.Params("text"),
-			"hostname": global.Hostname,
-		})
+		return c.JSON(makeDefaultResponseMap(fiber.Map{
+			"text": c.Params("text"),
+		}))
 	} else {
 		return c.SendString(fmt.Sprintf("text: %s\nhostname: %s\n", c.Params("text"), global.Hostname))
 	}
@@ -28,9 +49,9 @@ func StatusResp(c *fiber.Ctx) error {
 		return err
 	}
 	if responseJsonFlag {
-		return c.Status(status).JSON(fiber.Map{
+		return c.Status(status).JSON(makeDefaultResponseMap(fiber.Map{
 			"status": c.Params("status"),
-		})
+		}))
 	} else {
 		return c.SendString(fmt.Sprintf("status: %s\n", status))
 	}
@@ -44,9 +65,9 @@ func ResponseTimeResp(c *fiber.Ctx) error {
 	}
 	time.Sleep(time.Duration(responseTime))
 	if responseJsonFlag {
-		return c.JSON(fiber.Map{
+		return c.JSON(makeDefaultResponseMap(fiber.Map{
 			"time": c.Params("time"),
-		})
+		}))
 	} else {
 		return c.SendString(fmt.Sprintf("time: %s\n", responseTime))
 	}
@@ -67,9 +88,9 @@ func RandomStatusResp(c *fiber.Ctx) error {
 
 		}
 		if responseJsonFlag {
-			return c.Status(rs).JSON(fiber.Map{
+			return c.Status(rs).JSON(makeDefaultResponseMap(fiber.Map{
 				"status": rs,
-			})
+			}))
 		} else {
 			return c.SendString(fmt.Sprintf("status: %d\n", rs))
 		}
@@ -99,9 +120,9 @@ func RandomCrashResp(c *fiber.Ctx) error {
 
 		}
 		if responseJsonFlag {
-			return c.Status(rs).JSON(fiber.Map{
+			return c.Status(rs).JSON(makeDefaultResponseMap(fiber.Map{
 				"status": rs,
-			})
+			}))
 		} else {
 			return c.SendString(fmt.Sprintf("status: %d\n", rs))
 		}
