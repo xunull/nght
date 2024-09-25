@@ -14,6 +14,7 @@ func SetupRoutes(app *fiber.App) {
 	})
 
 	app.All("/echo/:text", EchoTextResp)
+	app.All("/echo_header", EchoReqHeader)
 
 	app.All("/status/:status", StatusResp)
 

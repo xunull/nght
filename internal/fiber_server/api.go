@@ -31,6 +31,17 @@ func EchoUrlResp(c *fiber.Ctx) error {
 	}
 }
 
+func EchoReqHeader(c *fiber.Ctx) error {
+
+	if responseJsonFlag {
+		return c.JSON(makeDefaultResponseMap(fiber.Map{
+			"headers": c.GetReqHeaders(),
+		}))
+	} else {
+		return c.SendString(fmt.Sprintf("headers: %v\nhostname: %s\n", c.GetReqHeaders(), global.Hostname))
+	}
+}
+
 func EchoTextResp(c *fiber.Ctx) error {
 
 	if responseJsonFlag {
