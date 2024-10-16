@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - master
+    tags:
+      - 'v*'
 
 env:
   APP_NAME: nght
@@ -33,7 +35,20 @@ jobs:
           password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Build Docker image
-        run: docker build . -t ${{ secrets.DOCKER_USERNAME }}/${{ env.APP_NAME }}:latest
+        run: |
+          if [[ ${{ github.ref_type }} == 'tag' ]]; then
+            TAG=${{ github.ref_name }}
+          else
+            TAG='latest'
+          fi
+          docker build . -t ${{ secrets.DOCKER_USERNAME }}/${{ env.APP_NAME }}:${TAG}
 
       - name: Push Docker image
-        run: docker push ${{ secrets.DOCKER_USERNAME }}/${{ env.APP_NAME }}:latest
+        run: |
+          if [[ ${{ github.ref_type }} == 'tag' ]]; then
+            TAG=${{ github.ref_name }}
+          else
+            TAG='latest'
+          fi
+          docker push ${{ secrets.DOCKER_USERNAME }}/${{ env.APP_NAME }}:${TAG}
+
