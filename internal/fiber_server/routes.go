@@ -15,13 +15,12 @@ func SetupRoutes(app *fiber.App) {
 
 	app.All("/echo/:text", EchoTextResp)
 	app.All("/echo_header", EchoReqHeader)
-
+	app.All("/echo_url", EchoUrlResp)
 	app.All("/status/:status", StatusResp)
+	app.All("/log_req_data", LogReqData)
 
 	app.All("/response_time/:time", ResponseTimeResp)
-
 	app.All("/random/:statusRandom", RandomStatusResp)
-
 	app.All("/random_crash/:percentage/:statusRandom", RandomCrashResp)
 
 	healthGroup := app.Group("/health")

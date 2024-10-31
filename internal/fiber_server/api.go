@@ -3,6 +3,7 @@ package fiber_server
 import (
 	"fmt"
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/log"
 	"github.com/xunull/nght/internal/global"
 	"github.com/xunull/nght/internal/utils"
 	"math/rand"
@@ -52,6 +53,11 @@ func EchoTextResp(c *fiber.Ctx) error {
 		return c.SendString(fmt.Sprintf("text: %s\nhostname: %s\n", c.Params("text"), global.Hostname))
 	}
 
+}
+
+func LogReqData(c *fiber.Ctx) error {
+	log.Infof(string(c.Body()))
+	return c.SendStatus(fiber.StatusOK)
 }
 
 func StatusResp(c *fiber.Ctx) error {
