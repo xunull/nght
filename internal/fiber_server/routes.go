@@ -23,6 +23,8 @@ func SetupRoutes(app *fiber.App) {
 	app.All("/random/:statusRandom", RandomStatusResp)
 	app.All("/random_crash/:percentage/:statusRandom", RandomCrashResp)
 
+	app.All("/healthz", HealthResp)
+
 	healthGroup := app.Group("/health")
 	{
 		healthGroup.All("", HealthResp)
