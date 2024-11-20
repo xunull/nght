@@ -19,7 +19,6 @@ func HealthResp(c *fiber.Ctx) error {
 	} else {
 		return c.SendStatus(http.StatusBadGateway)
 	}
-
 }
 
 func HealthRandomResp(c *fiber.Ctx) error {
