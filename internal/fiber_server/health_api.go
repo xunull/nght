@@ -2,6 +2,7 @@ package fiber_server
 
 import (
 	"github.com/gofiber/fiber/v2"
+	"net/http"
 	"sync"
 )
 
@@ -11,10 +12,14 @@ var (
 )
 
 func HealthResp(c *fiber.Ctx) error {
+	if healthStatus {
+		return c.JSON(fiber.Map{
+			"status": "UP",
+		})
+	} else {
+		return c.SendStatus(http.StatusBadGateway)
+	}
 
-	return c.JSON(fiber.Map{
-		"status": "UP",
-	})
 }
 
 func HealthRandomResp(c *fiber.Ctx) error {
