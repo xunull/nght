@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.0.3] — 2026-06-15
+
+Container distribution milestone: nght 第一次有官方容器镜像和 Helm chart。
+
+### Added
+
+- `/livez` endpoint — 永真 liveness probe, 不受 `/health/false` 翻转
+- Multi-arch container image on `ghcr.io/xunull/nght` (`linux/amd64` + `linux/arm64`)
+- Minimal Helm chart at `charts/nght/` + OCI distribution at `oci://ghcr.io/xunull/charts/nght`
+- Release workflow (`release.yml`) extended with buildx multi-arch build + chart-releaser
+
+### Changed
+
+- Dockerfile switched from `ubuntu:22.04` to `gcr.io/distroless/static-debian12:nonroot` — image size ~100MB → ~25MB
+- CGO disabled in container build (fasthttp limitation)
+- README adds "Container images" and "Kubernetes / Helm" sections (EN + ZH)
+
+### Removed
+
+- Legacy `.github/workflows/docker-publish.yml` (single-arch Docker Hub push, Oct 2024, superseded by multi-arch GHCR)
+
 ## [v0.0.2] — 2026-06-15
 
 Cleanup pass. Wires up every CLI flag that was previously dead, makes every
@@ -46,3 +67,4 @@ in English + Chinese with endpoint reference and nginx use-case recipes.
 - `nght client` is still a placeholder; full load-test client (status distribution + p50/p99) is deferred.
 
 [v0.0.2]: https://github.com/xunull/nght/releases/tag/v0.0.2
+[v0.0.3]: https://github.com/xunull/nght/releases/tag/v0.0.3
