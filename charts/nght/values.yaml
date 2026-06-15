@@ -1,0 +1,8 @@
+image:
+  repository: ghcr.io/xunull/nght
+  tag: ""
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8080

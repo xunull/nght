@@ -16,8 +16,6 @@
 
 .idea
 
-nght
-
 __pycache__/
 # compiled binary
 /nght
