@@ -1,21 +1,162 @@
 # nght
 
-a gin web server for nginx http test ( nginx gin http test  or nginx http test)
+> nginx-gin-http-test — a tiny, single-binary HTTP server with controllable behavior, built for stress-testing nginx (and any HTTP gateway) against arbitrary status codes, latency, and health states.
 
-本项目使用golang 和 gin 进行开发
+[中文版 / Chinese](./README.zh.md)
 
-使用golang开发的是因为go install 之后的bin文件可以直接运行,python和java都需要有依赖环境
+## Why
 
-使用gin开发是因为其很简单
+When you debug nginx upstream behavior — retry triggers, health probe windows, `proxy_next_upstream`, timeout layers — you need a "compliant" backend that does exactly what you ask. `nght` is that backend:
 
+- Return any status code you want via `/status/418`
+- Sleep N seconds before replying via `/response_time/3`
+- Flip "healthy" → "unhealthy" without restart via `/health/false` and `/health/true`
+- Roll dice on the status code (`/random/200502503`) or on the failure rate (`/random_crash/30/500502`)
 
-## python版本
+Single Go binary. Zero runtime deps. Two engines (gin & fiber) bundled, switchable via `--type`.
 
+## Install
+
+```bash
+go install github.com/xunull/nght@latest
+```
+
+Or download a pre-built binary from [Releases](https://github.com/xunull/nght/releases) (darwin/linux/windows × amd64/arm64).
+
+## Quick start
+
+```bash
+# default: gin engine on :8080
+nght server
+
+# fiber engine, JSON responses
+nght server -t fiber -p 8080 --response-json
+
+# version
+nght --version
+
+# Docker
+docker build -t nght . && docker run --rm -p 8080:8080 nght
+```
+
+## Endpoint reference
+
+| Path | Behavior | Example |
+|------|----------|---------|
+| `/echo/:text` | Echo the text. Response also carries hostname. | `curl :8080/echo/hello` |
+| `/echo_url` | Echo the request URL + hostname. | `curl :8080/echo_url` |
+| `/echo_header` | Echo all request headers (fiber only). | `curl :8080/echo_header -H 'X-Foo: bar'` |
+| `/log_req_data` | Log the body server-side, return 200 (fiber only). | `curl -d 'payload' :8080/log_req_data` |
+| `/status/:status` | Return the status code in the path. | `curl -i :8080/status/502` |
+| `/response_time/:time` | Sleep N seconds, then return 200. | `time curl :8080/response_time/3` |
+| `/random/:statusRandom` | Return a random status from the 3-char-grouped list. | `curl :8080/random/200502503` |
+| `/random_crash/:percentage/:statusRandom` | With N% chance, return 200; otherwise a random failure. | `curl :8080/random_crash/30/500502` |
+| `/health`, `/healthz` | Return 200 if "up", 502 if "down". | `curl :8080/health` |
+| `/health/true` | Flip "up" — subsequent `/health` returns 200. | `curl :8080/health/true` |
+| `/health/false` | Flip "down" — subsequent `/health` returns 502. | `curl :8080/health/false` |
+| `/health/random/:percentage` | With N% chance return 200, else 502. | `curl :8080/health/random/30` |
+
+### gin vs fiber engine compatibility
+
+`nght` ships two HTTP engines side by side. Use `--type gin` (default) or `--type fiber`.
+
+| Endpoint | gin | fiber |
+|----------|:---:|:---:|
+| `/echo/:text` | ✓ | ✓ |
+| `/echo_url` |   | ✓ |
+| `/echo_header` |   | ✓ |
+| `/log_req_data` |   | ✓ |
+| `/status/:status` | ✓ | ✓ |
+| `/response_time/:time` | ✓ | ✓ |
+| `/random/:statusRandom` | ✓ | ✓ |
+| `/random_crash/:percentage/:statusRandom` | ✓ | ✓ |
+| `/health` (and `/healthz`) | ✓ | ✓ |
+| `/health/true`, `/health/false` | ✓ | ✓ |
+| `/health/random/:percentage` | ✓ | ✓ |
+| `--response-json` flag wiring |   | ✓ |
+| Wildcard `*` fallback (echo url) |   | ✓ |
+| `NGHT-Hostname` response header |   | ✓ |
+
+The fiber engine is the more feature-complete option and uses `valyala/fasthttp` under the hood. gin is kept around for dual-engine A/B comparison (run the same workload against `:8080` gin and `:8081` fiber to see framework-level behavior differences).
+
+## nginx use-case recipes
+
+### 1. Verify `proxy_next_upstream` falls through on 502
+
+```nginx
+upstream nght_pool {
+    server 127.0.0.1:8080;
+    server 127.0.0.1:8081 backup;
+}
+location /api/ {
+    proxy_next_upstream error timeout http_502;
+    proxy_pass http://nght_pool;
+}
+```
+
+```bash
+# primary returns 502 100% of the time, backup returns 200
+nght server -p 8080 -t fiber &
+nght server -p 8081 -t fiber &
+# now hit nginx; you should always see 200, not 502
+curl -i http://nginx/api/status/502
+```
+
+### 2. Probe health window of nginx upstream healthcheck
+
+```bash
+nght server -p 8080 -t fiber &
+# nginx is configured to mark "down" after 3 consecutive 502s in 5 seconds
+curl http://nght:8080/health/false   # flip
+# nginx should drop nght from rotation within the window
+curl http://nght:8080/health/true    # flip back
+# verify nginx re-admits nght
+```
+
+### 3. Stress-test connection / read timeouts
+
+```nginx
+proxy_connect_timeout 1s;
+proxy_read_timeout    2s;
+```
+
+```bash
+nght server -t fiber &
+curl -i http://nginx/api/response_time/5   # should hit 504 from nginx, not 200 from nght
+```
+
+## Build & test
+
+```bash
+make build         # produces ./nght with ldflags-injected version
+make test          # go test ./...
+make vet           # go vet ./...
+make fmt-check     # gofmt -l . (fail on diff)
+make release       # goreleaser release --clean (tag-driven)
+```
+
+## Distribution
+
+- Single-binary install via `go install` or downloadable binary from GitHub Releases.
+- Cross-compiled for darwin/linux/windows × amd64/arm64 via [goreleaser](https://goreleaser.com/).
+- Multi-stage Dockerfile (`golang:1.22-bookworm` → `ubuntu:22.04`) included; entrypoint defaults to fiber.
+
+## Roadmap
+
+See the [project office-hours design doc](https://github.com/xunull/nght) for full roadmap. Short list:
+
+- **near-term**: real `nght client` load test subcommand (currently a stub), refactor fiber package-level state into struct fields, more nginx recipes
+- **path B**: GitHub Container Registry Docker images, Helm chart, prometheus `/metrics`
+- **path C**: dynamic path API (`POST /admin/route`), Web UI control panel, HTTP/3 + QUIC, record/replay
+
+## License
+
+See [LICENSE](./LICENSE).
+
+## Python parity
+
+A small FastAPI mirror of the core endpoints lives in `nght.py` for cases where you need a Python equivalent:
+
+```bash
 uvicorn nght:app --host 0.0.0.0 --port 8000 --reload
-uvicorn nght:app --host 0.0.0.0 --port 8001 --reload
-
-## todo
-
-1. 动态创建path,动态销毁path
-2. a api for create url path 
-3. use golang fasthttp
+```
