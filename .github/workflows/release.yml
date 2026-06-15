@@ -78,7 +78,7 @@ jobs:
       - name: Verify image version
         run: |
           docker pull ghcr.io/xunull/nght:${{ steps.version.outputs.version }}
-          VERSION_OUTPUT=$(docker run --rm ghcr.io/xunull/nght:${{ steps.version.outputs.version }} --version)
+          VERSION_OUTPUT=$(docker run --rm --entrypoint /nght ghcr.io/xunull/nght:${{ steps.version.outputs.version }} --version)
           echo "nght image --version output: $VERSION_OUTPUT"
           if ! echo "$VERSION_OUTPUT" | grep -q "${{ steps.version.outputs.version }}"; then
             echo "ERROR: image --version does not contain ${{ steps.version.outputs.version }}"
