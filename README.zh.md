@@ -55,6 +55,7 @@ docker build -t nght . && docker run --rm -p 8080:8080 nght
 | `/health/true` | 切"up"，后续 `/health` 返 200。 | `curl :8080/health/true` |
 | `/health/false` | 切"down"，后续 `/health` 返 502。 | `curl :8080/health/false` |
 | `/health/random/:percentage` | N% 概率返 200，否则 502。 | `curl :8080/health/random/30` |
+| `/livez` | k8s liveness probe —— 永真 200，独立于 `/health` 状态。 | `curl :8080/livez` |
 
 ### gin vs fiber 引擎对比
 
@@ -76,6 +77,7 @@ docker build -t nght . && docker run --rm -p 8080:8080 nght
 | `--response-json` flag 接通 |   | ✓ |
 | 通配 `*` 回显 url |   | ✓ |
 | `NGHT-Hostname` 响应头 |   | ✓ |
+| `/livez` (k8s liveness probe, 永真 200) | ✓ | ✓ |
 
 fiber 引擎更完整（底层用 `valyala/fasthttp`）。gin 保留作"双引擎对照测试"用 —— 同一负载同时打到 `:8080` (gin) 和 `:8081` (fiber)，对比框架级行为差异。
 
@@ -123,6 +125,18 @@ nght server -t fiber &
 curl -i http://nginx/api/response_time/5   # nginx 应该 504，而不是返 nght 的 200
 ```
 
+### 4. 在 k8s 里做故障注入
+
+```bash
+helm install nght oci://ghcr.io/xunull/charts/nght --version 0.0.3
+kubectl port-forward svc/nght 8080:8080 &
+curl http://localhost:8080/echo/hello
+curl -X POST http://localhost:8080/health/false
+kubectl get pods -w
+# livenessProbe 用 /livez，pod 不重启
+# 但 readinessProbe 返 502，Service endpoint 把 pod 摘掉
+```
+
 ## 构建 & 测试
 
 ```bash
@@ -139,12 +153,38 @@ make release       # goreleaser release --clean （tag 触发）
 - 跨平台编译 darwin/linux/windows × amd64/arm64（[goreleaser](https://goreleaser.com/)）。
 - 多阶段 Dockerfile（`golang:1.22-bookworm` → `ubuntu:22.04`），ENTRYPOINT 默认 fiber。
 
+## 容器镜像
+
+```bash
+docker pull ghcr.io/xunull/nght:0.0.3    # 多架构 manifest (linux/amd64 + linux/arm64)
+docker run --rm -p 8080:8080 ghcr.io/xunull/nght:0.0.3
+```
+
+基础镜像 `gcr.io/distroless/static-debian12:nonroot`（~25MB，nonroot UID 65532，无 shell —— `kubectl exec nght -- /bin/sh` 会失败）。`latest` tag 跟最新推送；**生产请 pin 具体 tag**。
+
+## Kubernetes / Helm
+
+```bash
+helm install nght oci://ghcr.io/xunull/charts/nght --version 0.0.3
+```
+
+Chart 只带 `Deployment` + `Service`（无 probes、无 securityContext、无 resources）。生产请覆盖 probes：
+
+```yaml
+livenessProbe:
+  httpGet: { path: /livez, port: 8080 }
+readinessProbe:
+  httpGet: { path: /health, port: 8080 }
+```
+
+**livenessProbe 用 `/livez`**——`/health/false` 切后端下线时**不应该**重启 pod。**readinessProbe 用 `/health`**——让手动降级的 pod 摘出流量但不杀掉。
+
 ## Roadmap
 
 完整路线见项目 office-hours design doc。短列表：
 
 - **近期**：实现 `nght client` 压测子命令（目前是占位）、fiber package-level state 重构成 struct 字段、扩 nginx 场景配方
-- **路线 B**：ghcr.io Docker image、Helm chart、prometheus `/metrics`
+- **路线 B** *（v0.0.3 已 ship multi-arch GHCR + 极简 Helm chart）*：ghcr.io Docker image、Helm chart、prometheus `/metrics`
 - **路线 C**：动态 path API (`POST /admin/route`)、Web UI 控制面板、HTTP/3 + QUIC、录回放
 
 ## License

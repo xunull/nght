@@ -55,6 +55,7 @@ docker build -t nght . && docker run --rm -p 8080:8080 nght
 | `/health/true` | Flip "up" — subsequent `/health` returns 200. | `curl :8080/health/true` |
 | `/health/false` | Flip "down" — subsequent `/health` returns 502. | `curl :8080/health/false` |
 | `/health/random/:percentage` | With N% chance return 200, else 502. | `curl :8080/health/random/30` |
+| `/livez` | k8s liveness probe — always 200, independent of `/health` state. | `curl :8080/livez` |
 
 ### gin vs fiber engine compatibility
 
@@ -76,6 +77,7 @@ docker build -t nght . && docker run --rm -p 8080:8080 nght
 | `--response-json` flag wiring |   | ✓ |
 | Wildcard `*` fallback (echo url) |   | ✓ |
 | `NGHT-Hostname` response header |   | ✓ |
+| `/livez` (k8s liveness probe, always 200) | ✓ | ✓ |
 
 The fiber engine is the more feature-complete option and uses `valyala/fasthttp` under the hood. gin is kept around for dual-engine A/B comparison (run the same workload against `:8080` gin and `:8081` fiber to see framework-level behavior differences).
 
@@ -125,6 +127,19 @@ nght server -t fiber &
 curl -i http://nginx/api/response_time/5   # should hit 504 from nginx, not 200 from nght
 ```
 
+### 4. Fault-inject via k8s Deployment
+
+```bash
+helm install nght oci://ghcr.io/xunull/charts/nght --version 0.0.3
+kubectl port-forward svc/nght 8080:8080 &
+curl http://localhost:8080/echo/hello
+# flip health down — readinessProbe should mark NotReady, NO pod restart
+curl -X POST http://localhost:8080/health/false
+kubectl get pods -w
+# livenessProbe uses /livez, so pod stays Ready for liveness
+# but Service endpoints remove the pod (readinessProbe=NotReady)
+```
+
 ## Build & test
 
 ```bash
@@ -141,12 +156,38 @@ make release       # goreleaser release --clean (tag-driven)
 - Cross-compiled for darwin/linux/windows × amd64/arm64 via [goreleaser](https://goreleaser.com/).
 - Multi-stage Dockerfile (`golang:1.22-bookworm` → `ubuntu:22.04`) included; entrypoint defaults to fiber.
 
+## Container images
+
+```bash
+docker pull ghcr.io/xunull/nght:0.0.3    # multi-arch manifest (linux/amd64 + linux/arm64)
+docker run --rm -p 8080:8080 ghcr.io/xunull/nght:0.0.3
+```
+
+Image is `gcr.io/distroless/static-debian12:nonroot` (~25MB, nonroot UID 65532, no shell — `kubectl exec nght -- /bin/sh` will fail). `latest` tag tracks the most recent push. Pin to a specific tag in production.
+
+## Kubernetes / Helm
+
+```bash
+helm install nght oci://ghcr.io/xunull/charts/nght --version 0.0.3
+```
+
+The chart ships a `Deployment` + `Service` only (no probes, no securityContext, no resources). For production, override with `livenessProbe` and `readinessProbe`:
+
+```yaml
+livenessProbe:
+  httpGet: { path: /livez, port: 8080 }
+readinessProbe:
+  httpGet: { path: /health, port: 8080 }
+```
+
+**Use `/livez` for liveness** — flipping `/health/false` to take a backend out of rotation must NOT restart the pod. **Use `/health` for readiness** so traffic stops flowing to a manually-degraded pod without killing it.
+
 ## Roadmap
 
 See the [project office-hours design doc](https://github.com/xunull/nght) for full roadmap. Short list:
 
 - **near-term**: real `nght client` load test subcommand (currently a stub), refactor fiber package-level state into struct fields, more nginx recipes
-- **path B**: GitHub Container Registry Docker images, Helm chart, prometheus `/metrics`
+- **path B** *(in progress — v0.0.3 ships multi-arch GHCR + minimal Helm chart)*: GitHub Container Registry Docker images, Helm chart, prometheus `/metrics`
 - **path C**: dynamic path API (`POST /admin/route`), Web UI control panel, HTTP/3 + QUIC, record/replay
 
 ## License
