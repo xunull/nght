@@ -180,3 +180,30 @@ func TestLogReqData_NoFormatStringCrash(t *testing.T) {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
 }
+
+func TestLivez_AlwaysOK(t *testing.T) {
+	app := newTestApp()
+	resp := doGET(t, app, "/livez")
+	if resp.StatusCode != 200 {
+		t.Fatalf("/livez = %d, want 200", resp.StatusCode)
+	}
+}
+
+func TestLivez_AfterHealthFlip(t *testing.T) {
+	defer resetHealth()
+	app := newTestApp()
+
+	if r := doGET(t, app, "/livez"); r.StatusCode != 200 {
+		t.Fatalf("initial /livez = %d", r.StatusCode)
+	}
+
+	doGET(t, app, "/health/false")
+
+	if r := doGET(t, app, "/livez"); r.StatusCode != 200 {
+		t.Fatalf("/livez after /health/false = %d, want 200", r.StatusCode)
+	}
+
+	if r := doGET(t, app, "/health"); r.StatusCode != 502 {
+		t.Fatalf("/health after false = %d, want 502", r.StatusCode)
+	}
+}

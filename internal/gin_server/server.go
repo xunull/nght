@@ -151,3 +151,7 @@ func HealthFalseResp(c *gin.Context) {
 	health = false
 	c.Status(http.StatusOK)
 }
+
+func LivezResp(c *gin.Context) {
+	c.Status(http.StatusOK)
+}

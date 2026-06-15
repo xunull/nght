@@ -146,3 +146,7 @@ func RandomCrashResp(c *fiber.Ctx) error {
 	}
 
 }
+
+func LivezResp(c *fiber.Ctx) error {
+	return c.SendStatus(fiber.StatusOK)
+}

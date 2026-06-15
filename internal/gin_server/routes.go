@@ -11,6 +11,7 @@ func AddRoute() {
 	// 随机返回状态码
 	ginServer.Any("/random/:statusRandom", RandomStatusResp)
 	ginServer.Any("/random_crash/:percentage/:statusRandom", RandomCrashResp)
+	ginServer.Any("/livez", LivezResp)
 
 	healthGroup := ginServer.Group("/health")
 	{
