@@ -1,20 +1,20 @@
-FROM golang:1.22.5-bookworm AS builder
+# syntax=docker/dockerfile:1.7
+FROM --platform=$BUILDPLATFORM golang:1.22.5-bookworm AS builder
+ARG VERSION
+ARG TARGETOS
+ARG TARGETARCH
 
 ENV GOPROXY=https://goproxy.cn,direct
 
+WORKDIR /src
 COPY . .
 
-RUN go build -o /app/
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
+    go build -trimpath -ldflags="-s -w -X github.com/xunull/nght/cmd.Version=${VERSION}" \
+    -o /out/nght .
 
-###########################################################################################
-
-FROM ubuntu:22.04
-
-RUN apt update && apt install -y lsof net-tools curl
-
-WORKDIR /app
-
-COPY --from=builder /app/nght /app/nght
-
-ENTRYPOINT ["/app/nght","server","--type", "fiber"]
-
+FROM gcr.io/distroless/static-debian12:nonroot
+COPY --from=builder /out/nght /nght
+EXPOSE 8080
+USER nonroot:nonroot
+ENTRYPOINT ["/nght", "server", "--type", "fiber"]
