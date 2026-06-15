@@ -102,6 +102,7 @@ jobs:
         uses: helm/chart-releaser-action@v1.7.0
         with:
           charts_dir: charts
+          skip_upload: "true"
           mark_as_latest: "false"
         env:
           CR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -116,4 +117,4 @@ jobs:
       - name: Push chart to OCI
         run: |
           VERSION=${GITHUB_REF_NAME#v}
-          helm push "charts/nght-${VERSION}.tgz" "oci://ghcr.io/xunull/charts"
+          helm push ".cr-release-packages/nght-${VERSION}.tgz" "oci://ghcr.io/xunull/charts"
