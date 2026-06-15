@@ -12,7 +12,7 @@ import (
 	"syscall"
 )
 
-func Serve(port int) {
+func Serve(port int, adminToken string) {
 	app := fiber.New(
 		fiber.Config{
 			CaseSensitive:     false,
