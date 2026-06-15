@@ -11,7 +11,7 @@ import (
 //   - secret == "":  allow all (the opt-in case — server has no admin
 //     protection because the operator chose not to set it)
 //   - secret != "":  require X-Admin-Token header with exact-match (no
-//                    trim, no normalization). Mismatch returns 401.
+//     trim, no normalization). Mismatch returns 401.
 //
 // Compare is constant-time for same-length tokens. Length-mismatch
 // returns 401 immediately, which leaks the configured length — an

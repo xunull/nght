@@ -22,8 +22,8 @@ func SetupRoutes(app *fiber.App, adminToken string) {
 	// Prefix reservations use a trailing "/" so they cover all
 	// sub-paths under the prefix. Exact reservations cover named
 	// leaf paths (e.g., "/echo_header", "/livez", "/healthz").
-	admin.MarkReserved("/echo")    // exact — covers "/echo" and namespace
-	admin.MarkReserved("/echo/")   // prefix — covers "/echo/:text", "/echo_url", etc.
+	admin.MarkReserved("/echo")  // exact — covers "/echo" and namespace
+	admin.MarkReserved("/echo/") // prefix — covers "/echo/:text", "/echo_url", etc.
 	admin.MarkReserved("/echo_header")
 	admin.MarkReserved("/echo_url")
 	admin.MarkReserved("/status")
