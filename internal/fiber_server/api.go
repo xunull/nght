@@ -56,7 +56,7 @@ func EchoTextResp(c *fiber.Ctx) error {
 }
 
 func LogReqData(c *fiber.Ctx) error {
-	log.Infof(string(c.Body()))
+	log.Infof("%s", string(c.Body()))
 	return c.SendStatus(fiber.StatusOK)
 }
 
@@ -70,7 +70,7 @@ func StatusResp(c *fiber.Ctx) error {
 			"status": c.Params("status"),
 		}))
 	} else {
-		return c.SendString(fmt.Sprintf("status: %s\n", status))
+		return c.Status(status).SendString(fmt.Sprintf("status: %d\n", status))
 	}
 
 }
@@ -80,13 +80,13 @@ func ResponseTimeResp(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	time.Sleep(time.Duration(responseTime))
+	time.Sleep(time.Duration(responseTime) * time.Second)
 	if responseJsonFlag {
 		return c.JSON(makeDefaultResponseMap(fiber.Map{
 			"time": c.Params("time"),
 		}))
 	} else {
-		return c.SendString(fmt.Sprintf("time: %s\n", responseTime))
+		return c.SendString(fmt.Sprintf("time: %d\n", responseTime))
 	}
 
 }

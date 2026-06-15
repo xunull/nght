@@ -2,6 +2,7 @@ package fiber_server
 
 import (
 	"github.com/gofiber/fiber/v2"
+	"math/rand"
 	"net/http"
 	"sync"
 )
@@ -22,12 +23,16 @@ func HealthResp(c *fiber.Ctx) error {
 }
 
 func HealthRandomResp(c *fiber.Ctx) error {
-
-	c.Params("time")
-
-	return c.JSON(fiber.Map{
-		"status": "UP",
-	})
+	percentage, err := c.ParamsInt("percentage")
+	if err != nil {
+		return err
+	}
+	if rand.Intn(100) < percentage {
+		return c.JSON(fiber.Map{
+			"status": "UP",
+		})
+	}
+	return c.SendStatus(http.StatusBadGateway)
 }
 
 func SetHealthTrue(c *fiber.Ctx) error {

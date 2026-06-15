@@ -83,7 +83,6 @@ func RandomStatusResp(c *gin.Context) {
 		if status, err := utils.SplitStatus(param.StatusRandom); err != nil {
 			c.JSON(400, gin.H{"msg": err})
 		} else {
-			rand.Seed(time.Now().UnixNano())
 			if len(status) > 1 {
 				i := rand.Intn(l / 3)
 				c.JSON(status[i], gin.H{"msg": status[i]})
@@ -103,7 +102,6 @@ func RandomCrashResp(c *gin.Context) {
 		if status, err := utils.SplitStatus(param.StatusRandom); err != nil {
 			c.JSON(400, gin.H{"msg": err})
 		} else {
-			rand.Seed(time.Now().UnixNano())
 			if rand.Intn(100) < param.Percentage {
 				c.Status(http.StatusOK)
 			} else {
@@ -132,7 +130,6 @@ func HealthRandomResp(c *gin.Context) {
 	if err := c.ShouldBindUri(&param); err != nil {
 		c.JSON(400, gin.H{"msg": err})
 	} else {
-		rand.Seed(time.Now().UnixNano())
 		if rand.Intn(100) < param.Percentage {
 			c.Status(http.StatusOK)
 		} else {

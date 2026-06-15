@@ -9,7 +9,6 @@ import (
 )
 
 var (
-	EchoHostname bool
 	AppName      string
 	ServerType   string
 	ResponseJson bool
@@ -24,21 +23,21 @@ var serverCmd = &cobra.Command{
 
 		global.SetAppName(AppName)
 
-		if ServerType == "gin" {
+		switch ServerType {
+		case "gin":
 			gin_server.Serve(Port)
-		} else if ServerType == "fiber" {
+		case "fiber":
+			fiber_server.SetResponseJson(ResponseJson)
 			fiber_server.Serve(Port)
-		} else {
+		default:
 			log.Fatal("server type not support")
 		}
-
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(serverCmd)
-	serverCmd.PersistentFlags().BoolVar(&EchoHostname, "echo-hostname", false, "echo host name")
 	serverCmd.PersistentFlags().StringVarP(&ServerType, "type", "t", "gin", "server type")
-	serverCmd.PersistentFlags().BoolVar(&ResponseJson, "response-json", false, "response json")
+	serverCmd.PersistentFlags().BoolVar(&ResponseJson, "response-json", false, "response json (fiber only)")
 	serverCmd.PersistentFlags().StringVar(&AppName, "app-name", "nght", "app name")
 }
