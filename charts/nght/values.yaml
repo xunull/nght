@@ -6,3 +6,13 @@ image:
 service:
   type: ClusterIP
   port: 8080
+
+# NGHT_ADMIN_TOKEN: opt-in admin-token auth for the /admin/routes API.
+# - "" (default) = admin API is fully open (no protection; only safe if
+#   you restrict /admin/* via NetworkPolicy or listen address).
+# - any non-empty string = admin requests must include matching
+#   X-Admin-Token header. Recommended: 32+ random bytes.
+#   Examples:
+#     helm install ... --set adminToken=$(openssl rand -hex 32)
+#     helm install ... --set-string adminToken=$MY_TOKEN
+adminToken: ""

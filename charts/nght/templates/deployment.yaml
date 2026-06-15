@@ -22,3 +22,6 @@ spec:
             - name: http
               containerPort: 8080
               protocol: TCP
+          env:
+            - name: NGHT_ADMIN_TOKEN
+              value: {{ .Values.adminToken | quote }}
