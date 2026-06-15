@@ -23,6 +23,37 @@ func RegisterFiberRoutes(app *fiber.App, secret string) {
 	RegisterFiberRoutesWithTable(app, secret, defaultTable)
 }
 
+// Lookup returns the RouteConfig registered for path on the package-level
+// default table, or (RouteConfig{}, false) if not present. Used by
+// fiber_server's wildcard middleware to dispatch dynamic routes without
+// exposing the table singleton to other packages.
+func Lookup(path string) (RouteConfig, bool) {
+	return defaultTable.Get(path)
+}
+
+// MarkReserved marks path as reserved on the package-level default table.
+// The fiber_server's route setup calls this for every hardcoded
+// endpoint so dynamic Register calls cannot shadow built-in behavior
+// (plan-eng-review C1 single source of truth).
+func MarkReserved(path string) {
+	defaultTable.MarkReserved(path)
+}
+
+// Register adds a route to the package-level default table. Returns
+// nil on success or one of the package-level validation errors.
+// Used by integration tests and by future CLI / control-plane clients
+// that want to bypass the /admin/routes HTTP API and seed the table
+// at startup.
+func Register(cfg RouteConfig) error {
+	return defaultTable.Register(cfg)
+}
+
+// Unregister removes a route from the package-level default table.
+// Returns true if it existed. Idempotent.
+func Unregister(path string) bool {
+	return defaultTable.Unregister(path)
+}
+
 // RegisterFiberRoutesWithTable is the same as RegisterFiberRoutes but
 // accepts an explicit *RouteTable. Use this in tests for isolation.
 func RegisterFiberRoutesWithTable(app *fiber.App, secret string, tbl *RouteTable) {

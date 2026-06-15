@@ -48,24 +48,32 @@ Deferred from v0.0.3 (container distribution milestone). Each item was considere
 
 ---
 
-## 3. Dynamic path API (`POST /admin/route`) for v0.0.4
+## 3. Dynamic path API (`POST /admin/routes`) for v0.0.4
 
-**What:** Add `POST /admin/route` and `DELETE /admin/route/{path}` endpoints with admin token auth. Each registered route carries its own status code, latency, and health behavior — all hot-reloadable without nght restart.
+**Status:** **IN PROGRESS** — user 2026-06-15 决定做(从最初的"roadmap 一句话 + AI 推测的 deferred 设计"升级为真实需求),design doc 写好 + plan-eng-review 完,等实现。
 
-**Why:** Currently nght's behavior is fixed at compile time (the 11 endpoints in `routes.go`). A user wanting "an endpoint that returns 503 for the next 60 seconds" has to do a code change + redeploy. Dynamic routing lets SREs configure the test rig from the control plane, no rebuild needed. README's `path C` roadmap calls this out as item #1.
+**Design doc:** `~/.gstack/projects/nght/quincy-master-design-20260615-212204.md` (15.8KB)
 
-**Pros:**
-- Eliminates the "I need one more endpoint, let me PR" friction
-- Enables ad-hoc test scenarios without code deploys (timing-sensitive ones, in particular)
-- Sets up nght to be a true "nginx test rig" rather than a fixed set of behaviors
-- Concurrent-safe in-memory routing table with RWMutex (Go-idiomatic)
+**Scope locked:**
+- SRE 临时压测 nginx config 的真实场景
+- `/admin/routes` (POST register / DELETE unregister / GET list) 端点
+- `NGHT_ADMIN_TOKEN` opt-in auth (没设 = 全开放,设了 = 必须 X-Admin-Token header)
+- 路由表 in-memory + sync.RWMutex,无持久化
+- 只 fiber 引擎实现
+- reserved path list 通过 `MarkReserved(path)` 集中维护,fiber routes.go 调它
+- wildcard 改 middleware,先查 dynamic table,miss 才 fallback
+- constant-time token 比对,不 trim,exact match,拒绝带 whitespace 的 token
+- 动态路由 health 独立,不动 process-global /health
+- helm chart values.yaml 加 `adminToken: ""` 默认空,k8s Secret 透传
 
-**Cons:**
-- ~200-400 LOC of new code (admin auth, route table, registration, deletion, listing)
-- Admin token must be configurable (env var, ConfigMap, or k8s Secret)
-- New attack surface — any endpoint reachable through dynamic routes inherits the same auth model
-- Behavior must be tested under restart (in-memory table = no persistence)
+**Implementation tasks:** 见 design doc 末尾的 "## GSTACK REVIEW REPORT" → Implementation Tasks
 
-**Context:** Design the route table as `map[string]RouteConfig` with `RouteConfig = {StatusCode int, LatencyMs int, HealthFlip bool}`. Endpoints can be queried via `GET /admin/routes`. Auth: `X-Admin-Token` header checked against `NGHT_ADMIN_TOKEN` env var. Routes are NOT persisted — restart = fresh state. Worth a separate /plan-eng-review session before implementation.
+**Original 200-400 LOC estimate** holds, but only 3 core code files (table/middleware/fiber) + 3 tests + 2 wiring + 3 docs.
 
-**Depends on:** v0.0.3 ships. This is a standalone PR for v0.0.4.
+---
+
+## Original item (now superseded by 3. v0.0.4)
+
+This was originally deferred from v0.0.3, but the user has confirmed intent to implement on 2026-06-15. The original "AI-only drafted" version is below for historical reference; the v0.0.4 entry above is the source of truth.
+
+**What (original):** Add `POST /admin/route` and `DELETE /admin/route/{path}` endpoints with admin token auth.

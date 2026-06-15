@@ -2,14 +2,16 @@ package fiber_server
 
 import (
 	"fmt"
-	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/logger"
-	"github.com/gofiber/fiber/v2/middleware/recover"
-	"github.com/gofiber/fiber/v2/middleware/requestid"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
+
+	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/logger"
+	"github.com/gofiber/fiber/v2/middleware/recover"
+	"github.com/gofiber/fiber/v2/middleware/requestid"
+	"github.com/xunull/nght/internal/admin"
 )
 
 func Serve(port int, adminToken string) {
@@ -33,6 +35,7 @@ func Serve(port int, adminToken string) {
 	})
 
 	SetupRoutes(app)
+	admin.RegisterFiberRoutes(app, adminToken)
 
 	go func() {
 		if err := app.Listen(fmt.Sprintf(":%d", port)); err != nil {
