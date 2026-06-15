@@ -57,6 +57,37 @@ docker build -t nght . && docker run --rm -p 8080:8080 nght
 | `/health/random/:percentage` | N% 概率返 200，否则 502。 | `curl :8080/health/random/30` |
 | `/livez` | k8s liveness probe —— 永真 200，独立于 `/health` 状态。 | `curl :8080/livez` |
 
+## 动态路由 API（admin，仅 fiber）
+
+`/admin/routes` 系列端点让你运行时注册任意 path，并让 nght 按指定 status code + latency 响应 —— 用于临时压测 nginx 配置或按需故障注入，**不用重构建**。
+
+| 方法 | 路径 | Body / 参数 | 行为 |
+|------|------|--------------|------|
+| `POST` | `/admin/routes` | `{"path":"/api/timeout","status_code":504,"latency_ms":3000}` | 注册动态路由。成功 201，校验失败或命中保留路径 400。 |
+| `GET` | `/admin/routes` | — | 列出当前注册的所有路由。 |
+| `DELETE` | `/admin/routes/<path>` | path 是完整 URL 后缀，如 `/admin/routes/api/timeout` | 撤销。永远 204（幂等）。 |
+
+动态路由**仅 fiber 引擎**支持（Gin 按设计没有 admin）。状态**只在内存**，进程重启清空。注册的 path 不能跟上面 11 个硬编码端点冲突 —— `Register` 命中硬编码 path 或其 prefix 保留时返 400 Conflict。保留路径包括：`/echo`、`/echo_header`、`/echo_url`、`/status`、`/log_req_data`、`/response_time`、`/random`、`/random_crash`、`/healthz`、`/livez`，外加 prefix 保留 `/echo/`、`/status/`、`/response_time/`、`/random/`、`/random_crash/`、`/health/`。
+
+**鉴权（`NGHT_ADMIN_TOKEN`）：** opt-in。env var 未设时 `/admin/*` 完全开放 —— 只在你用 NetworkPolicy 或监听地址限制访问时安全。设了之后所有 `/admin/*` 请求必须带 `X-Admin-Token: <value>` header。比对是 constant-time，按字节比较（不 trim）—— 如果 env 里的 secret 带了意外空白，每个 admin 请求都会静默 401（启动时若检测到 secret 含空白会 warn）。
+
+```bash
+# 注册一个返 504 + 3s 延迟的路由
+curl -X POST http://nght:8080/admin/routes \
+  -H 'Content-Type: application/json' \
+  -H 'X-Admin-Token: mysecret' \
+  -d '{"path":"/api/timeout","status_code":504,"latency_ms":3000}'
+
+# 打它（SRE 场景：验证 nginx retry / proxy_next_upstream）
+time curl -i http://nght:8080/api/timeout
+
+# 清理
+curl -X DELETE http://nght:8080/admin/routes/api/timeout \
+  -H 'X-Admin-Token: mysecret'
+```
+
+Kubernetes 里通过 chart 的 `adminToken` 值传入（见下方 [Kubernetes / Helm](#kubernetes--helm)）。
+
 ### gin vs fiber 引擎对比
 
 `nght` 同时打包两套 HTTP 引擎，`--type gin`（默认）或 `--type fiber` 切换。
@@ -127,8 +158,29 @@ curl -i http://nginx/api/response_time/5   # nginx 应该 504，而不是返 ngh
 
 ### 4. 在 k8s 里做故障注入
 
+临时故障注入不用改代码 —— 注册一个动态路由，打它，删掉。不用 PR、不用重构建、不用重启 pod：
+
 ```bash
-helm install nght oci://ghcr.io/xunull/charts/nght --version 0.0.3
+helm install nght oci://ghcr.io/xunull/charts/nght --version 0.0.4 \
+  --set adminToken=$(openssl rand -hex 32)
+kubectl port-forward svc/nght 8080:8080 &
+
+# 注入一个 502（nginx 会 retry past）
+curl -X POST http://localhost:8080/admin/routes \
+  -H 'Content-Type: application/json' \
+  -H "X-Admin-Token: $ADMIN_TOKEN" \
+  -d '{"path":"/api/inject","status_code":502,"latency_ms":0}'
+curl -i http://localhost:8080/api/inject
+
+# 清理
+curl -X DELETE http://localhost:8080/admin/routes/api/inject \
+  -H "X-Admin-Token: $ADMIN_TOKEN"
+```
+
+持续 health-down 行为仍可用经典 `/health/false`：
+
+```bash
+helm install nght oci://ghcr.io/xunull/charts/nght --version 0.0.4
 kubectl port-forward svc/nght 8080:8080 &
 curl http://localhost:8080/echo/hello
 curl -X POST http://localhost:8080/health/false
@@ -165,7 +217,34 @@ docker run --rm -p 8080:8080 ghcr.io/xunull/nght:0.0.3
 ## Kubernetes / Helm
 
 ```bash
-helm install nght oci://ghcr.io/xunull/charts/nght --version 0.0.3
+helm install nght oci://ghcr.io/xunull/charts/nght --version 0.0.4
+```
+
+启用 admin-token 鉴权：
+
+```bash
+helm install nght oci://ghcr.io/xunull/charts/nght --version 0.0.4 \
+  --set adminToken=$(openssl rand -hex 32)
+```
+
+`adminToken` 不设时 `/admin/*` 完全开放。**生产必须设 + 用 NetworkPolicy 限制 `/admin/*` 访问** —— chart 本身不做网络级隔离。示例策略：
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: nght-admin-lockdown
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: nght
+  ingress:
+  - from:
+    - podSelector: {}                # 允许同 namespace pod
+    - namespaceSelector: {}           # 改成你的 SRE namespace
+    ports:
+    - port: 8080
+      protocol: TCP
 ```
 
 Chart 只带 `Deployment` + `Service`（无 probes、无 securityContext、无 resources）。生产请覆盖 probes：
@@ -184,8 +263,8 @@ readinessProbe:
 完整路线见项目 office-hours design doc。短列表：
 
 - **近期**：实现 `nght client` 压测子命令（目前是占位）、fiber package-level state 重构成 struct 字段、扩 nginx 场景配方
-- **路线 B** *（v0.0.3 已 ship multi-arch GHCR + 极简 Helm chart）*：ghcr.io Docker image、Helm chart、prometheus `/metrics`
-- **路线 C**：动态 path API (`POST /admin/route`)、Web UI 控制面板、HTTP/3 + QUIC、录回放
+- **路线 B** *(v0.0.3 已 ship multi-arch GHCR + 极简 Helm chart；v0.0.4 已 ship 动态路由 API)*：ghcr.io Docker image、Helm chart、prometheus `/metrics`
+- **路线 C**：Web UI 控制面板、HTTP/3 + QUIC、录回放
 
 ## License
 

@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.0.4] — 2026-06-15
+
+SRE 临时压测 nginx 配置:运行时动态路由 API,无需重启 nght。
+
+### Added
+
+- **Dynamic-route API** at `POST /admin/routes`, `GET /admin/routes`, `DELETE /admin/routes/<path>` (fiber engine only). SRE can register a route with a custom `status_code` and `latency_ms` at runtime, hit it immediately for nginx config validation, and delete it when done — no rebuild, no restart, no PR.
+- In-memory `sync.RWMutex`-guarded `RouteTable` (no persistence; restart = fresh state, by design).
+- `NGHT_ADMIN_TOKEN` opt-in auth middleware: unset = admin API fully open; set = requests must include matching `X-Admin-Token` header. Constant-time compare, no trim, startup warning if the secret contains whitespace.
+- Single-source-of-truth `MarkReserved` on every hardcoded fiber path so dynamic `Register` of an existing endpoint returns 409 Conflict. Both exact and prefix reservations are supported.
+- `helm template` and helm install now plumb `NGHT_ADMIN_TOKEN` through the chart via `values.adminToken` (default `""`).
+
+### Changed
+
+- `internal/fiber_server/routes.go`: the catch-all `app.All("*", ...)` is now preceded by a dynamic-dispatch `app.Use` middleware that consults the admin table and falls through to the wildcard only on miss.
+- `cmd/server.go` reads `NGHT_ADMIN_TOKEN` from the env and warns on whitespace at startup. `fiber_server.Serve` signature gains an `adminToken` parameter; `gin_server.Serve` is unchanged (admin API is fiber-only).
+- README and CHANGELOG add a "Dynamic route API" section (EN + ZH) plus NetworkPolicy advice for production deployments.
+
 ## [v0.0.3] — 2026-06-15
 
 Container distribution milestone: nght 第一次有官方容器镜像和 Helm chart。

@@ -57,6 +57,39 @@ docker build -t nght . && docker run --rm -p 8080:8080 nght
 | `/health/random/:percentage` | With N% chance return 200, else 502. | `curl :8080/health/random/30` |
 | `/livez` | k8s liveness probe — always 200, independent of `/health` state. | `curl :8080/livez` |
 
+## Dynamic route API (admin, fiber only)
+
+The `/admin/routes` endpoints let you register an arbitrary path at runtime and have nght respond with a specific status code and latency — useful for pressure-testing nginx config or fault-injecting on demand, without rebuilding the binary.
+
+| Method | Path | Body / Param | Behavior |
+|--------|------|--------------|----------|
+| `POST` | `/admin/routes` | `{"path":"/api/timeout","status_code":504,"latency_ms":3000}` | Register a dynamic route. Returns 201 on success, 400 on validation failure or reserved path. |
+| `GET` | `/admin/routes` | — | List all currently-registered routes. |
+| `DELETE` | `/admin/routes/<path>` | path is the full URL suffix, e.g. `/admin/routes/api/timeout` | Unregister. Always returns 204 (idempotent). |
+
+Dynamic routes are **fiber-engine only** (Gin has no admin support, by design). They are stored in memory only; restart clears them. Registered paths cannot collide with the 11 hardcoded endpoints above — a `Register` of a hardcoded path or any path under a reserved prefix returns 400 Conflict. (The reserved paths are: `/echo`, `/echo_header`, `/echo_url`, `/status`, `/log_req_data`, `/response_time`, `/random`, `/random_crash`, `/healthz`, `/livez`, plus prefix reservations `/echo/`, `/status/`, `/response_time/`, `/random/`, `/random_crash/`, `/health/`.)
+
+**Auth (`NGHT_ADMIN_TOKEN`):** opt-in. If the env var is unset, `/admin/*` is fully open — safe only if you restrict access via NetworkPolicy or `listen` address. If set, every request to `/admin/*` must include `X-Admin-Token: <value>`. Mismatch returns 401. The comparison is constant-time; the value is matched byte-for-byte (no trim) — if the secret in your env has stray whitespace, every admin request will silently 401 (the server warns at startup if it detects whitespace in `NGHT_ADMIN_TOKEN`).
+
+Example session:
+
+```bash
+# Register a route that returns 504 after 3s
+curl -X POST http://nght:8080/admin/routes \
+  -H 'Content-Type: application/json' \
+  -H 'X-Admin-Token: mysecret' \
+  -d '{"path":"/api/timeout","status_code":504,"latency_ms":3000}'
+
+# Hit it (SRE scenario: validate nginx retry / proxy_next_upstream)
+time curl -i http://nght:8080/api/timeout
+
+# Clean up
+curl -X DELETE http://nght:8080/admin/routes/api/timeout \
+  -H 'X-Admin-Token: mysecret'
+```
+
+In Kubernetes, set `adminToken` in your values (see [Kubernetes / Helm](#kubernetes--helm) below).
+
 ### gin vs fiber engine compatibility
 
 `nght` ships two HTTP engines side by side. Use `--type gin` (default) or `--type fiber`.
@@ -129,8 +162,30 @@ curl -i http://nginx/api/response_time/5   # should hit 504 from nginx, not 200 
 
 ### 4. Fault-inject via k8s Deployment
 
+For ad-hoc fault injection that doesn't require a code change: register a
+dynamic route, hit it, delete it. No PR, no rebuild, no pod restart.
+
 ```bash
-helm install nght oci://ghcr.io/xunull/charts/nght --version 0.0.3
+helm install nght oci://ghcr.io/xunull/charts/nght --version 0.0.4 \
+  --set adminToken=$(openssl rand -hex 32)
+kubectl port-forward svc/nght 8080:8080 &
+
+# Inject a 502 that nginx will retry past
+curl -X POST http://localhost:8080/admin/routes \
+  -H 'Content-Type: application/json' \
+  -H "X-Admin-Token: $ADMIN_TOKEN" \
+  -d '{"path":"/api/inject","status_code":502,"latency_ms":0}'
+curl -i http://localhost:8080/api/inject
+
+# Clean up
+curl -X DELETE http://localhost:8080/admin/routes/api/inject \
+  -H "X-Admin-Token: $ADMIN_TOKEN"
+```
+
+For persistent health-down behavior, the classic `/health/false` still works:
+
+```bash
+helm install nght oci://ghcr.io/xunull/charts/nght --version 0.0.4
 kubectl port-forward svc/nght 8080:8080 &
 curl http://localhost:8080/echo/hello
 # flip health down — readinessProbe should mark NotReady, NO pod restart
@@ -168,7 +223,34 @@ Image is `gcr.io/distroless/static-debian12:nonroot` (~25MB, nonroot UID 65532, 
 ## Kubernetes / Helm
 
 ```bash
-helm install nght oci://ghcr.io/xunull/charts/nght --version 0.0.3
+helm install nght oci://ghcr.io/xunull/charts/nght --version 0.0.4
+```
+
+To opt in to admin-token auth, pass `adminToken` (32+ random bytes recommended):
+
+```bash
+helm install nght oci://ghcr.io/xunull/charts/nght --version 0.0.4 \
+  --set adminToken=$(openssl rand -hex 32)
+```
+
+With `adminToken` unset, `/admin/*` is fully open. **In production, set it AND restrict `/admin/*` access via NetworkPolicy** — the chart does not enforce network-level isolation on its own. Example policy:
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: nght-admin-lockdown
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: nght
+  ingress:
+  - from:
+    - podSelector: {}                # allow from any pod in the namespace
+    - namespaceSelector: {}           # adjust to your SRE namespace
+    ports:
+    - port: 8080
+      protocol: TCP
 ```
 
 The chart ships a `Deployment` + `Service` only (no probes, no securityContext, no resources). For production, override with `livenessProbe` and `readinessProbe`:
@@ -187,8 +269,8 @@ readinessProbe:
 See the [project office-hours design doc](https://github.com/xunull/nght) for full roadmap. Short list:
 
 - **near-term**: real `nght client` load test subcommand (currently a stub), refactor fiber package-level state into struct fields, more nginx recipes
-- **path B** *(in progress — v0.0.3 ships multi-arch GHCR + minimal Helm chart)*: GitHub Container Registry Docker images, Helm chart, prometheus `/metrics`
-- **path C**: dynamic path API (`POST /admin/route`), Web UI control panel, HTTP/3 + QUIC, record/replay
+- **path B** *(v0.0.3 ships multi-arch GHCR + minimal Helm chart; v0.0.4 ships the dynamic-route API)*: GitHub Container Registry Docker images, Helm chart, prometheus `/metrics`
+- **path C**: Web UI control panel, HTTP/3 + QUIC, record/replay
 
 ## License
 
