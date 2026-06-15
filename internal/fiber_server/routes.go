@@ -9,7 +9,7 @@ import (
 	"github.com/xunull/nght/internal/global"
 )
 
-func SetupRoutes(app *fiber.App) {
+func SetupRoutes(app *fiber.App, adminToken string) {
 
 	app.Use(func(c *fiber.Ctx) error {
 		SetCommonHeader(c)
@@ -60,25 +60,24 @@ func SetupRoutes(app *fiber.App) {
 		healthGroup.All("/false", SetHealthFalse)
 	}
 
-	// Dynamic-route dispatch (plan-eng-review A1): before falling through
-	// to the wildcard handler, check the admin table. Hit → apply the
-	// route's status code and latency. Miss → c.Next() continues the
-	// chain to the wildcard fallback below.
-	app.Use(func(c *fiber.Ctx) error {
-		cfg, ok := admin.Lookup(c.Path())
-		if !ok {
-			return c.Next()
-		}
-		if cfg.LatencyMs > 0 {
-			time.Sleep(time.Duration(cfg.LatencyMs) * time.Millisecond)
-		}
-		return c.SendStatus(cfg.StatusCode)
-	})
+	// Register admin routes BEFORE the wildcard catch-all below.
+	// Empirically fiber's radix tree in real Listen mode routes `*`
+	// before later-registered specific paths if the wildcard was
+	// registered first; moving admin.RegisterFiberRoutes here fixes
+	// that ordering so the more-specific admin paths win.
+	admin.RegisterFiberRoutes(app, adminToken)
 
-	// Wildcard fallback — only reached when no hardcoded route AND no
-	// dynamic route matched. Preserves the original behavior of
-	// returning a 200 with the url + hostname for unrecognized paths.
+	// Wildcard fallback. Dynamic routes (admin table) take priority;
+	// miss falls through to the original behavior of returning a 200
+	// with the url + hostname for unrecognized paths.
 	app.All("*", func(c *fiber.Ctx) error {
+		if cfg, ok := admin.Lookup(c.Path()); ok {
+			if cfg.LatencyMs > 0 {
+				time.Sleep(time.Duration(cfg.LatencyMs) * time.Millisecond)
+			}
+			return c.SendStatus(cfg.StatusCode)
+		}
+
 		fmt.Println(c.OriginalURL())
 
 		if responseJsonFlag {

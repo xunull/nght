@@ -19,7 +19,7 @@ func newTestApp() *fiber.App {
 		SetCommonHeader(c)
 		return c.Next()
 	})
-	SetupRoutes(app)
+	SetupRoutes(app, "")
 	return app
 }
 

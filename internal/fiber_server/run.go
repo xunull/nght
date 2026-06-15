@@ -11,7 +11,6 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/gofiber/fiber/v2/middleware/requestid"
-	"github.com/xunull/nght/internal/admin"
 )
 
 func Serve(port int, adminToken string) {
@@ -34,8 +33,7 @@ func Serve(port int, adminToken string) {
 		return c.SendString("Hello, World 👋!")
 	})
 
-	SetupRoutes(app)
-	admin.RegisterFiberRoutes(app, adminToken)
+	SetupRoutes(app, adminToken)
 
 	go func() {
 		if err := app.Listen(fmt.Sprintf(":%d", port)); err != nil {
