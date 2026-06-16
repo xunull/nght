@@ -493,9 +493,10 @@ func printClientTextReport(r *clientReport) {
 	}
 }
 
-// atoiOrNeg returns (n, true) if s parses as a non-negative int, else (0, false).
-// Used for stable sorting of the status histogram.
 func atoiOrNeg(s string) (int, bool) {
+	if len(s) == 0 {
+		return 0, false
+	}
 	n := 0
 	for i, r := range s {
 		if r < '0' || r > '9' {
