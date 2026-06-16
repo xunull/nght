@@ -15,6 +15,91 @@ When you debug nginx upstream behavior — retry triggers, health probe windows,
 
 Single Go binary. Zero runtime deps. Two engines (gin & fiber) bundled, switchable via `--type`.
 
+## nght client — load-test from the same binary
+
+As of v0.0.5 the same `nght` binary also ships a `client` subcommand that load-tests any HTTP target and reports p50/p95/p99 latency plus a status code histogram. No need to install `wrk` / `vegeta` / `ab` to drive nght — the client is in the box.
+
+```bash
+# Quick smoke against local nght server: 10 workers, 5 seconds, JSON output
+nght client -H 127.0.0.1 -p 8080 -c 10 -d 5s --output json
+
+# Drive nght to 1000 RPS against an upstream behind nginx (validate retry)
+nght client -H nginx -p 80 -c 50 -d 30s --rps 1000
+
+# Stop after exactly 10000 requests, plain text report
+nght client -H nght-svc -p 8080 -c 20 -n 10000
+
+# Combine: 30s OR 5000 requests, whichever first
+nght client -H 127.0.0.1 -p 8080 -c 10 -d 30s -n 5000
+```
+
+Flags:
+
+| Flag | Short | Default | Meaning |
+|------|-------|---------|---------|
+| `--host` | `-H` | `127.0.0.1` | target host (capital `-H` because cobra reserves `-h` for `--help`) |
+| `--port` | `-p` | `8080` | target port |
+| `--concurrency` | `-c` | `10` | number of concurrent workers |
+| `--duration` | `-d` | `10s` | test wall-clock duration; `0` = unlimited (requires `--total`) |
+| `--total` | `-n` | `0` | stop after N total requests; `0` = unlimited (requires `--duration`) |
+| `--rps` | `-q` | `0` | cap requests per second; `0` = full speed |
+| `--output` | `-o` | `text` | report format: `text` or `json` |
+| `--timeout` | — | `5s` | per-request timeout |
+| `--path` | — | `/` | URL path to hit (must start with `/`) |
+
+Stop semantics: **2 stop triggers** (duration + total), OR — the test ends as soon as either is reached. `--rps` is a pacing cap, not a stop condition. If you pass `--duration 0` and `--total 0` together, the client refuses to start (otherwise it would run forever).
+
+Sample text report:
+
+```
+Target:        127.0.0.1:8080/echo/hello
+Concurrency:   10
+Duration:      5s (actual 5000 ms)
+
+Total requests: 87421
+Actual RPS:     17484.20
+Errors:         0
+
+Latency (ms):
+  p50 = 0.21  p95 = 0.45  p99 = 0.78  min = 0.05  max = 4.92  samples = 10000
+
+Status histogram:
+  200             87421
+```
+
+Sample JSON report (`--output json`):
+
+```json
+{
+  "config": { "host":"127.0.0.1","port":8080,"concurrency":10,"duration":"5s","total":0,"rps":0,"timeout":"5s","path":"/echo/hello" },
+  "summary": { "total_requests":87421,"actual_rps":17484.20,"duration_ms":5000,"errors":0 },
+  "latency_ms": { "p50":0.21,"p95":0.45,"p99":0.78,"min":0.05,"max":4.92,"samples":10000 },
+  "status_histogram": { "200":87421 }
+}
+```
+
+Status taxonomy: HTTP responses land in their numeric bucket (`200`, `404`, `500`, …); per-request timeouts land in `"timeout"`; connection refused / DNS failure / EOF land in `"network_error"`. Any `>= 400` HTTP code, plus both error buckets, count toward `errors`.
+
+Percentiles use reservoir sampling (Algorithm R) over at most 10,000 latency samples, so a 1M-request test reports p99 with roughly ±1% standard error while keeping the aggregator's memory bounded.
+
+### SRE workflow: pair client + dynamic route (v0.0.4)
+
+```bash
+# Terminal 1: fire client
+nght client -H nght-svc -p 8080 -c 20 -d 30s --path /api/inject --output json
+
+# Terminal 2: inject a 5xx mid-test
+curl -X POST http://nght-svc:8080/admin/routes \
+  -H "X-Admin-Token: $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"path":"/api/inject","status_code":502,"latency_ms":3000}'
+
+# ... 30s later, client report shows 502s + 3s p99 spike in the histogram
+# Then clean up:
+curl -X DELETE http://nght-svc:8080/admin/routes/api/inject \
+  -H "X-Admin-Token: $ADMIN_TOKEN"
+```
+
 ## Install
 
 ```bash

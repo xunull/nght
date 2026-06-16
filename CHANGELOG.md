@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.0.5] — 2026-06-16
+
+Same binary, now also a load-test client. The 28-line `cmd/client.go` stub (`fmt.Println("client called")`) is replaced with a real worker-pool load tester that reports p50/p95/p99 latency and a status code histogram. SREs can now run a closed loop against any HTTP backend (including nght itself) without installing `wrk` / `vegeta` / `ab`.
+
+### Added
+
+- **`nght client` subcommand** at `cmd/client.go`. 9 flags (`--host/-H --port/-p --concurrency/-c --duration/-d --total/-n --rps/-q --output/-o --timeout --path`); see README for full table.
+- Text and JSON output. JSON schema is the design-doc sample: `config / summary / latency_ms / status_histogram`. Text is human-readable with stable status-code ordering.
+- Reservoir sampling (Algorithm R, N=10000) over per-request latencies → bounded aggregator memory with ~±1% p99 standard error even for million-request runs.
+- Status taxonomy: HTTP responses → numeric bucket, per-request timeout → `"timeout"`, connection refused / DNS failure / EOF → `"network_error"`. Anything `>= 400` HTTP or any error bucket counts toward `errors`.
+- Safety net: passing `--duration 0 --total 0` together is a fatal startup error (otherwise the test would run forever).
+- Single shared `http.Client` with `MaxConnsPerHost = max(100, c*2)`; no redirect following; `io.Copy(io.Discard, body)` + `defer Close` so the connection pool is reused.
+- Cancellation bridge: `signal.NotifyContext` → `ctx.Done()` → `sync.Once` close-once `stopCh`. Ctrl-C / SIGTERM during a test prints a partial report and exits 1.
+- 2 stop triggers (duration + total), OR semantics. `--rps` is a pacing cap, **not** a stop condition.
+
+### Changed
+
+- `cmd/` package gains three new files: `client.go` (~520 LOC, the implementation), `client_test.go` (~280 LOC, table-driven unit tests for parseClientConfig + helpers), `client_e2e_test.go` (~120 LOC, httptest-based end-to-end with happy-path / unreachable / JSON-shape assertions).
+- README and README.zh gain a "nght client" section with the 9-flag table, stop-semantics explainer, sample text + JSON report, and the SRE workflow that pairs the client with v0.0.4's `/admin/routes` dynamic route API.
+
+### Notes
+
+- The short letter for `--host` is capital `-H`. Cobra reserves lowercase `-h` for `--help` on every subcommand; using `-h` for host would panic on first `Execute`. 1-character deviation from the v0.0.5 design doc, documented in the `init()` comment.
+
 ## [v0.0.4] — 2026-06-15
 
 SRE 临时压测 nginx 配置:运行时动态路由 API,无需重启 nght。

@@ -15,6 +15,91 @@
 
 Go 单二进制，零运行时依赖。内含 gin 和 fiber 两套引擎，`--type` 切换。
 
+## nght client —— 同 binary 自带的压测客户端
+
+v0.0.5 起，`nght` 同一个二进制多了 `client` 子命令，可对任意 HTTP target 做压测并报 p50/p95/p99 延迟 + 状态码直方图。不用额外装 `wrk` / `vegeta` / `ab` 就能压 nght。
+
+```bash
+# 5 秒压本地 nght，JSON 报告
+nght client -H 127.0.0.1 -p 8080 -c 10 -d 5s --output json
+
+# 1000 RPS 上限压 nginx 上游
+nght client -H nginx -p 80 -c 50 -d 30s --rps 1000
+
+# 累计 10000 个请求后停
+nght client -H nght-svc -p 8080 -c 20 -n 10000
+
+# 30 秒 或 5000 个请求，先到先停
+nght client -H 127.0.0.1 -p 8080 -c 10 -d 30s -n 5000
+```
+
+参数表：
+
+| 参数 | 短选项 | 默认 | 含义 |
+|------|--------|------|------|
+| `--host` | `-H` | `127.0.0.1` | 目标 host（短选项是大写 `-H`，cobra 占用 `-h` 给 `--help`） |
+| `--port` | `-p` | `8080` | 目标端口 |
+| `--concurrency` | `-c` | `10` | 并发 worker 数 |
+| `--duration` | `-d` | `10s` | 测试时长；`0` = 无限（需要 `--total`） |
+| `--total` | `-n` | `0` | 跑满 N 个请求后停；`0` = 无限（需要 `--duration`） |
+| `--rps` | `-q` | `0` | 上限 RPS；`0` = 满速 |
+| `--output` | `-o` | `text` | 报告格式：`text` 或 `json` |
+| `--timeout` | — | `5s` | 单请求超时 |
+| `--path` | — | `/` | URL path（必须以 `/` 开头） |
+
+停止语义：**两个停止触发**（duration + total），OR 关系 —— 哪个先到就先停。`--rps` 是限速，不是停止条件。如果同时给 `--duration 0` 和 `--total 0`，客户端会直接 fatal 拒绝启动（否则会跑死循环）。
+
+文本报告示例：
+
+```
+Target:        127.0.0.1:8080/echo/hello
+Concurrency:   10
+Duration:      5s (actual 5000 ms)
+
+Total requests: 87421
+Actual RPS:     17484.20
+Errors:         0
+
+Latency (ms):
+  p50 = 0.21  p95 = 0.45  p99 = 0.78  min = 0.05  max = 4.92  samples = 10000
+
+Status histogram:
+  200             87421
+```
+
+JSON 报告示例（`--output json`）：
+
+```json
+{
+  "config": { "host":"127.0.0.1","port":8080,"concurrency":10,"duration":"5s","total":0,"rps":0,"timeout":"5s","path":"/echo/hello" },
+  "summary": { "total_requests":87421,"actual_rps":17484.20,"duration_ms":5000,"errors":0 },
+  "latency_ms": { "p50":0.21,"p95":0.45,"p99":0.78,"min":0.05,"max":4.92,"samples":10000 },
+  "status_histogram": { "200":87421 }
+}
+```
+
+状态码桶：HTTP 响应按数字分桶（`200`、`404`、`500` …）；单请求超时进 `"timeout"`；连接被拒 / DNS 失败 / EOF 进 `"network_error"`。所有 `>= 400` 的 HTTP 码 + 两个 error 桶都计入 `errors`。
+
+百分位用 reservoir sampling（Algorithm R），最多保留 10000 个延迟样本。所以 100 万请求的测试报 p99 标准误约 ±1%，同时聚合器内存有上界。
+
+### SRE 工作流：client + 动态路由（v0.0.4）配对
+
+```bash
+# Terminal 1: 跑 client
+nght client -H nght-svc -p 8080 -c 20 -d 30s --path /api/inject --output json
+
+# Terminal 2: 测试期间注入 5xx
+curl -X POST http://nght-svc:8080/admin/routes \
+  -H "X-Admin-Token: $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"path":"/api/inject","status_code":502,"latency_ms":3000}'
+
+# 30s 后 client 报告会显示 502 增加 + p99 飙升
+# 然后清理：
+curl -X DELETE http://nght-svc:8080/admin/routes/api/inject \
+  -H "X-Admin-Token: $ADMIN_TOKEN"
+```
+
 ## 安装
 
 ```bash
